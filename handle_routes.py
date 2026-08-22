@@ -5,11 +5,18 @@ import sqlite3
 from pathlib import Path
 
 def not_found():
+    if (isinstance(conf.dynamic_routes["html"]["/:"], dict)):
+        return (
+            Path(conf.base)
+            / conf.dirs["html"]
+            / conf.dynamic_routes["html"]["/:"]["file"],
+            conf.dynamic_routes["html"]["/:"]["options"]
+        )
     return (
         Path(conf.base)
         / conf.dirs["html"]
-        / conf.dynamic_routes["html"]["/:"]["file"],
-        conf.dynamic_routes["html"]["/:"]["options"]
+        / conf.dynamic_routes["html"]["/:"],
+        []
     )
 
 # def not_found():
