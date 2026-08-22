@@ -7,6 +7,7 @@ import json
 import env_engine
 import conf
 import handle_routes
+import html_inject
 
 env_engine.load_env("settings.env")
 
@@ -39,22 +40,35 @@ class Handler(BaseHTTPRequestHandler):
     # ---- static file routes ------------------------------------------
 
     def do_GET(self):
-        parts = self._path_parts(self.path)
-
         handler = handle_routes.get(self.path)
-        file_path = handler()
 
-        if file_path.exists():
-            status = 404 if handler == handle_routes.not_found else 200
-            self.send_response(status)
-            self.send_header(
-                "Content-Type",
-                conf.MIME_TYPES.get(file_path.suffix, "application/octet-stream")
-            )
-            self.end_headers()
-            self.wfile.write(file_path.read_bytes())
-        else:
+        file_path, options = handler()
+
+        print(file_path)
+
+        if not file_path.exists():
             self.send_error(404)
+            return
+
+        if file_path.suffix == ".html":
+            body = html_inject.render_html(file_path, options).encode("utf-8")
+        else:
+            body = file_path.read_bytes()
+
+        status = 404 if handler == handle_routes.not_found else 200
+
+        self.send_response(status)
+        self.send_header(
+            "Content-Type",
+            conf.MIME_TYPES.get(
+                file_path.suffix,
+                "application/octet-stream"
+            )
+        )
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+
+        self.wfile.write(body)
 
 
 if __name__ == "__main__":

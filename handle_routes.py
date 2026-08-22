@@ -5,7 +5,15 @@ import sqlite3
 from pathlib import Path
 
 def not_found():
-    return Path(conf.base) / conf.dirs['html'] / conf.dynamic_routes['html']['/:']
+    return (
+        Path(conf.base)
+        / conf.dirs["html"]
+        / conf.dynamic_routes["html"]["/:"]["file"],
+        conf.dynamic_routes["html"]["/:"]["options"]
+    )
+
+# def not_found():
+    # return Path(conf.base) / conf.dirs['html'] / conf.dynamic_routes['html']['/:']
 
 def get_db_connection():
     return sqlite3.connect('db/product.db')
@@ -15,9 +23,18 @@ def get_file(route, type):
     def handler():
         r = conf.dynamic_routes[type].get(route)
 
-        if not r: return not_found()
-        return Path(conf.base) / conf.dirs[type] / r
-    
+        if not r:
+            return not_found()
+
+        if isinstance(r, dict):
+            file = r["file"]
+            options = r["options"]
+        else:
+            file = r
+            options = []
+
+        return Path(conf.base) / conf.dirs[type] / file, options
+
     return handler
 
 def init():
