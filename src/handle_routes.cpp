@@ -9,7 +9,7 @@
 namespace fs = std::filesystem;
 
 struct Value {
-    enum class Type {
+    enum struct Type {
         String,
         Bool,
         List,

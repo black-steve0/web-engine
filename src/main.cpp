@@ -46,8 +46,7 @@ static std::string content_type(
     return "application/octet-stream";
 }
 
-class Handler {
-public:
+struct Handler {
     void operator()(
         const httplib::Request& request,
         httplib::Response& response

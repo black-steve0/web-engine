@@ -3,7 +3,7 @@
 #include <vector>
 
 struct Value {
-    enum class Type {
+    enum struct Type {
         String,
         Bool,
         List,
