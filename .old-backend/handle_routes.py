@@ -19,9 +19,6 @@ def not_found():
         []
     )
 
-# def not_found():
-    # return Path(conf.base) / conf.dirs['html'] / conf.dynamic_routes['html']['/:']
-
 def get_db_connection():
     return sqlite3.connect('db/product.db')
 
