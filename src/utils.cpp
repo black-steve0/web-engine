@@ -27,26 +27,32 @@ namespace utils {
     bool isString(const std::string& string, const std::string& flags) {
         return string.length() >= 2
             && string.front() == string.back()
-            && contains(flags, string[0]);
+            && flags.find(string.front()) != std::string::npos;
     }
 
     /*
     Checks if the letter exists in the list of characters
     */
-    bool contains(const std::string string, const char character) {
-        for (int i = 0; string[i] != '\0'; i++) {
-            if (string[i] == character)
-                return true;
-        }
-        return false;
-    }
+    // bool contains(std::string string, const char character) {
+    //     for (int i = 0; string[i] != '\0'; i++) {
+    //         if (string[i] == character)
+    //             return true;
+    //     }
+    //     return false;
+    // }
 
     /*
     Returns the lower case version of an std::string
     */
     std::string lowercase(const std::string& string) {
-        std::transform(string.begin(), string.end(), string.begin(),
-                       [](unsigned char c) {return std::tolower(c);});
+        std::string result = string;
+
+        std::transform(result.begin(), result.end(), result.begin(),
+            [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+
+        return result;
     }
 
     std::vector<std::string> split(const std::string& string, const char character) {
