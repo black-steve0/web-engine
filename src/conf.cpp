@@ -1,7 +1,9 @@
 #include "conf.hpp"
+#include "class.hpp"
 
 namespace conf {
 
+    models::Variable force_root;
     models::Variable dirs;
     models::Variable routes;
     models::Variable base;
@@ -16,6 +18,7 @@ namespace conf {
             return loadErr;
         }
 
+        auto force_root = env::get("force-root");
         auto newDirs = env::get("dirs");
         auto newRoutes = env::get("routes");
         auto newBase = env::get("base");
@@ -23,6 +26,7 @@ namespace conf {
         auto newDefaults = env::get("defaults");
         auto newRoot = env::get("force-root");
 
+        if (!force_root) return force_root.error();
         if (!newDirs) return newDirs.error();
         if (!newRoutes) return newRoutes.error();
         if (!newBase) return newBase.error();

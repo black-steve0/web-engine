@@ -217,11 +217,13 @@ namespace env {
                 models::Variable entry = std::move(*parsed);
                 entry.name = key;
 
+                std::printf("key: %s, value: %s\n", key.c_str(), value.c_str());
+
                 stack.back().children.push_back(std::move(entry));
                 continue;
             }
 
-            return err::Error(err::Code::OTHER, "Invalid syntax on line " + std::to_string(line_number));
+            return err::Error(err::Code::OTHER, "Invalid syntax in routes.conf on line " + std::to_string(line_number));
         }
 
         if (stack.size() != 1) {
@@ -243,25 +245,25 @@ namespace env {
             return std::unexpected(err::Error(err::Code::OTHER, "Config not loaded - call load_env() first"));
         }
 
-        const models::Variable* current = &_config;
+        models::Variable current = _config;
 
         for (const auto& key : utils::split(variable, '.')) {
-            const models::Variable* next = current->getChild(key);
+            auto next = current.getChild(key);
 
-            if (next == nullptr) {
+            if (!next) {
                 // Fall back to the environment, same as the Python version.
                 const char* env_value = std::getenv(variable.c_str());
 
-                if (env_value == nullptr) {
+                if (!env_value) {
                     return std::unexpected(err::Error(err::Code::UNDEFINED, "Variable not found: " + variable));
                 }
 
                 return models::Variable("string", std::string(env_value));
             }
 
-            current = next;
+            current = (*next);
         }
 
-        return *current;
+        return current;
     }
 }

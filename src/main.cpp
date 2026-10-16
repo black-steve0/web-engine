@@ -12,9 +12,9 @@
 namespace {
 
     std::string mimeTypeFor(const std::filesystem::path& path) {
-        const models::Variable* mime = conf::mimeTypes.getChild(path.extension().string());
+        auto mime = conf::mimeTypes.getChild(path.extension().string());
 
-        if (mime == nullptr) {
+        if (!mime) {
             return "application/octet-stream";
         }
 
@@ -37,21 +37,21 @@ namespace {
         } else {
             fallback.content = "404 Not Found";
         }
-        std::printf("%s", fallback.content.c_str());
         return fallback;
     }
 
     void handleGet(const httplib::Request& req, httplib::Response& res) {
-        auto resource = getFile(req.path);
+        std::printf("got: %s\n", req.path.c_str());
+        auto resource = getFile(req.path.substr(1));
 
         int status = 200;
 
         if (!resource) {
-            status = 404;
+            status = resource.error().code;
             resource = readNotFoundResource();
         }
 
-        std::cout << resource->route << std::endl;
+        std::cout << "returned: " << resource->route << std::endl;
 
         res.status = status;
         res.set_content(resource->content, mimeTypeFor(resource->route));
@@ -60,17 +60,23 @@ namespace {
 }
 
 int main() {
+    std::printf("Loading settings.env...\n");
     err::Error loadErr = env::load_env("settings.env");
+    std::printf("grabbed settings.env...\n");
 
     if (loadErr.code != static_cast<int>(err::Code::OK)) {
         std::cerr << "Failed to load settings.env: " << loadErr.message << std::endl;
         return 1;
     }
+    std::cerr << loadErr.message << std::endl;
 
     // NOTE: env::load_env() only tracks one global config at a time, so
     // "port" must be read out of settings.env *before* init() loads
     // routes.conf and overwrites it.
+
+    std::printf("attempting to grab port...\n");
     auto portVar = env::get("port");
+    std::printf("grabbed port...\n");
 
     if (!portVar) {
         std::cerr << "port is not defined in settings.env" << std::endl;
@@ -86,6 +92,7 @@ int main() {
 
     int port = std::stoi(*portStr);
 
+    std::printf("running init...\n");
     auto initResult = init();
 
     if (!initResult) {
@@ -95,9 +102,9 @@ int main() {
 
     httplib::Server server;
 
+    std::printf("Get server loading...\n");
+    std::printf("Server started on http://localhost:%d\n", port);
     server.Get(".*", handleGet);
-
-    std::printf("Server started on http://localhost:%d", port);
 
     server.listen("localhost", port);
 

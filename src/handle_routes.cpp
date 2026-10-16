@@ -2,19 +2,25 @@
 #include "conf.hpp"
 #include "html_inject.hpp"
 
+#include <cstddef>
+#include <expected>
 #include <fstream>
 #include <sstream>
 
 std::expected<std::filesystem::path, err::Error> not_found() {
-    const models::Variable* override = conf::defaults.getChild("404");
+    auto override = conf::defaults.getChild("404");
 
-    if (override != nullptr) {
+    if (override) {
         auto file = override->getString();
 
         if (file) {
-            return std::filesystem::path(*file);
+            std::string basePath = *conf::base.getString();
+            std::filesystem::path result = basePath / std::filesystem::path("html/defaults") / *override->getString();
+
+            return result;
         }
     }
+
 
     return std::filesystem::path("");
 }
@@ -24,42 +30,63 @@ std::expected<std::filesystem::path, err::Error> not_found() {
 // directory (e.g. "static"). If the route has a matching entry in
 // conf::routes, that entry's "file" value is used instead of the raw
 // route.
+
 std::expected<std::filesystem::path, err::Error>
 getFilePath(std::filesystem::path route, std::string type) {
+
     std::string routeKey = route.string();
-    std::filesystem::path relative = route.relative_path();
+    std::printf("%s\n", routeKey.c_str());
+    std::printf("%s\n", type.c_str());
 
-    const models::Variable* matchedRoute = conf::routes.getChild(routeKey);
-
-    if (matchedRoute != nullptr) {
-        const models::Variable* file = matchedRoute->getChild("file");
-
-        if (file != nullptr) {
-            auto fileStr = file->getString();
-
-            if (fileStr) {
-                relative = *fileStr;
-            }
-        }
+    auto matchedRoute = conf::routes.getChild(type);
+    if (!matchedRoute) {
+        std::printf("[getFilePath] Route not found in configuration\n");
     }
 
-    const models::Variable* baseDir = conf::dirs.getChild(type);
-
-    if (baseDir == nullptr) {
-        return std::unexpected(err::Error(err::Code::OTHER, "Unknown dirs entry: " + type));
+    matchedRoute = (*matchedRoute).getChild(routeKey);
+    if (!matchedRoute) {
+        std::printf("[getFilePath] Route not found in configuration\n");
+        return std::unexpected{err::NOT_FOUND};
     }
 
-    auto baseStr = baseDir->getString();
+    std::string basePath = *conf::base.getString();
+    std::filesystem::path result = basePath / std::filesystem::path(type) / *matchedRoute->getString();
 
-    if (!baseStr) {
-        return std::unexpected(err::Error(err::Code::OTHER, "dirs." + type + " is not a string"));
-    }
-
-    return std::filesystem::path(*baseStr) / relative;
+    return result;
 }
 
+
 std::expected<models::Resource, err::Error> getFile(std::filesystem::path route) {
-    auto resolved = getFilePath(route, "static");
+    std::string url = route.string();
+
+    std::string fragment;
+    std::string query;
+
+    if (auto pos = url.find('#'); pos != std::string::npos) {
+        fragment = url.substr(pos);
+        url = url.substr(0, pos);
+    }
+
+    if (auto pos = url.find('?'); pos != std::string::npos) {
+        query = url.substr(pos);
+        url = url.substr(0, pos);
+    }
+
+    std::filesystem::path p(url);
+
+    std::string routeUrl = p.stem().string();
+    std::string parent = p.parent_path().string();
+
+    std::printf("%s\n", routeUrl.c_str());
+    std::printf("%s\n", parent.c_str());
+
+    if (parent.empty()) {
+        parent = "html";
+    } else {
+        routeUrl+=p.extension().string();
+    }
+
+    auto resolved = getFilePath(routeUrl, parent);
 
     if (!resolved) {
         return std::unexpected(resolved.error());
@@ -70,13 +97,13 @@ std::expected<models::Resource, err::Error> getFile(std::filesystem::path route)
     }
 
     if (resolved->extension() == ".html") {
-        const models::Variable* matchedRoute = conf::routes.getChild(route.string());
+        auto matchedRoute = conf::routes.getChild(route.string());
         models::Variable options;
 
-        if (matchedRoute != nullptr) {
-            const models::Variable* opts = matchedRoute->getChild("options");
+        if (matchedRoute) {
+            auto opts = matchedRoute->getChild("options");
 
-            if (opts != nullptr) {
+            if (opts) {
                 options = *opts;
             }
         }
