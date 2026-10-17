@@ -69,6 +69,10 @@ namespace models {
 
         std::expected<Variable, err::Error> getChild(const std::string& childName) const;
         const std::vector<Variable>& getChildren() const;
+
+        std::string dump(int indent = 0) const;
+        void print() const;
+        friend std::ostream& operator<<(std::ostream& os, const Variable& v);
     };
 
     struct Resource {

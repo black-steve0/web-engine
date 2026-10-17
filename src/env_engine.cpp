@@ -62,12 +62,12 @@ namespace env {
     std::expected<models::Variable, err::Error> parse_route_value(std::string value) {
         value = utils::strip(value, " ");
 
-        auto wrap_no_options = [](std::expected<models::Variable, err::Error> parsed)
-            -> std::expected<models::Variable, err::Error> {
-
-            if (!parsed) {
-                return std::unexpected(parsed.error());
-            }
+        auto wrap_no_options =
+            [](std::expected<models::Variable, err::Error> parsed) ->
+                std::expected<models::Variable, err::Error> {
+                if (!parsed) {
+                    return std::unexpected(parsed.error());
+                }
 
             models::Variable route;
             route.type = "route";
@@ -98,7 +98,10 @@ namespace env {
         std::string file_value = utils::strip(value.substr(0, options_start), " ");
         std::string options_value = utils::strip(value.substr(options_start), " ");
 
+        std::printf("option: %s\n", file_value.c_str());
+        std::printf("option: %s\n", options_value.c_str());
         auto parsed_file = parse_value(file_value);
+        std::printf("parsed: %s\n", parsed_file->data.c_str());
 
         if (!parsed_file) {
             return std::unexpected(parsed_file.error());
@@ -119,7 +122,12 @@ namespace env {
 
         models::Variable options = std::move(*parsed_options);
         options.name = "options";
+        std::printf("option: %s\n", options.data.c_str());
         route.addChild(std::move(options));
+
+        // for (auto i: route.getChildren()) {
+        //         std::printf("child: %s\n", i.getString()->c_str());
+        // }
 
         return route;
     }

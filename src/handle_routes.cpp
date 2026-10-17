@@ -35,23 +35,37 @@ std::expected<std::filesystem::path, err::Error>
 getFilePath(std::filesystem::path route, std::string type) {
 
     std::string routeKey = route.string();
-    std::printf("%s\n", routeKey.c_str());
-    std::printf("%s\n", type.c_str());
+    std::printf("key thing: %s\n", routeKey.c_str());
+    std::printf("type thing: %s\n", type.c_str());
 
     auto matchedRoute = conf::routes.getChild(type);
+    std::printf("got child");
     if (!matchedRoute) {
-        std::printf("[getFilePath] Route not found in configuration\n");
+        std::printf("[getFilePath] type '%s' not found in configuration\n", type.c_str());
+        return std::unexpected{err::NOT_FOUND};
     }
 
     matchedRoute = (*matchedRoute).getChild(routeKey);
+    std::printf("got child\n");
     if (!matchedRoute) {
         std::printf("[getFilePath] Route not found in configuration\n");
         return std::unexpected{err::NOT_FOUND};
     }
+    std::printf("valid child: %s\n", matchedRoute->name.c_str() );
 
     std::string basePath = *conf::base.getString();
-    std::filesystem::path result = basePath / std::filesystem::path(type) / *matchedRoute->getString();
+    auto file = matchedRoute->getString();
+    if (!file) {
+        matchedRoute->print();
 
+        file = matchedRoute->getChild("file")->getString()->c_str();
+        // std::filesystem::path result = basePath / std::filesystem::path(type) / *file;
+        
+        // return std::unexpected{err::NOT_FOUND};
+    }
+    std::filesystem::path result = basePath / std::filesystem::path(type) / *file;
+
+    std::printf("formated %s\n", file->c_str());
     return result;
 }
 
@@ -77,8 +91,8 @@ std::expected<models::Resource, err::Error> getFile(std::filesystem::path route)
     std::string routeUrl = p.stem().string();
     std::string parent = p.parent_path().string();
 
-    std::printf("%s\n", routeUrl.c_str());
-    std::printf("%s\n", parent.c_str());
+    std::printf("route: %s\n", routeUrl.c_str());
+    std::printf("type: %s\n", parent.c_str());
 
     if (parent.empty()) {
         parent = "html";
@@ -86,15 +100,19 @@ std::expected<models::Resource, err::Error> getFile(std::filesystem::path route)
         routeUrl+=p.extension().string();
     }
 
+    std::printf("Resolving path\n");
     auto resolved = getFilePath(routeUrl, parent);
 
+    std::printf("Resolved path\n");
     if (!resolved) {
         return std::unexpected(resolved.error());
     }
+    std::printf("Unresolving path\n");
 
     if (!std::filesystem::exists(*resolved) || std::filesystem::is_directory(*resolved)) {
         return std::unexpected(err::Error(err::Code::OTHER, "File not found: " + resolved->string()));
     }
+    std::printf("File found\n");
 
     if (resolved->extension() == ".html") {
         auto matchedRoute = conf::routes.getChild(route.string());
