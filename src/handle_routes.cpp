@@ -80,6 +80,17 @@ std::expected<models::URL, err::Error> explodeURL(std::filesystem::path URL) {
     models::URL result;
 
     std::string url = URL.string();
+    std::filesystem::path p(url);
+
+    result.name = p.stem().string();
+    result.parent = p.parent_path().string();
+
+    if (auto pos = url.find('.'); pos != std::string::npos) {
+        result.extention = url.substr(pos+1);
+        url = url.substr(0, pos);
+
+        result.name += "."+result.extention;
+    }
 
     if (auto pos = url.find('#'); pos != std::string::npos) {
         result.fragment = url.substr(pos);
@@ -90,11 +101,6 @@ std::expected<models::URL, err::Error> explodeURL(std::filesystem::path URL) {
         result.query = url.substr(pos);
         url = url.substr(0, pos);
     }
-
-    std::filesystem::path p(url);
-
-    result.name = p.stem().string();
-    result.parent = p.parent_path().string();
 
     return result;
 }
@@ -153,23 +159,26 @@ std::expected<std::filesystem::path, err::Error> getPath(models::URL url) {
 // todo
 //
 
-httplib::Request errorRequest(err::Error, std::string message) {
-    httplib::Request request_not_found;
-    // request_not_found.set_header(const std::string &key, const std::string &val)
-    return request_not_found;
+models::Response errorResponse(err::Error, std::string message) {
+    models::Response reponse;
+
+    
+
+    return reponse;
 }
 
 std::expected<models::Response, err::Error> get(httplib::Request request) {
     models::Response response;
-    response.status = err::OK.code;
+    response.status = 200;
 
     DEBUG_LOG(std::printf("Method: %s\n", request.method.c_str()));
 
     auto url = explodeURL(request.path);
     if (!url) {
-        request = errorRequest(err::BAD_REQUEST, "URL is bad.");
-        ; // throw error somehow
+        response = errorResponse(err::BAD_REQUEST, "URL is bad.");
+        return response;
     }
+    DEBUG_LOG(url->print());
 
     std::string accept = request.get_header_value("Accept");
 
