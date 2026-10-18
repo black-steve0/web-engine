@@ -26,44 +26,6 @@ std::expected<std::filesystem::path, err::Error> not_found() {
     return std::filesystem::path("");
 }
 
-// std::expected<std::filesystem::path, err::Error>
-// getFilePath(std::filesystem::path route, std::string type) {
-
-//     std::string routeKey = route.string();
-//     std::printf("key thing: %s\n", routeKey.c_str());
-//     std::printf("type thing: %s\n", type.c_str());
-
-//     auto matchedRoute = conf::routes.getChild(type);
-//     std::printf("got child");
-//     if (!matchedRoute) {
-//         std::printf("[getFilePath] type '%s' not found in configuration\n", type.c_str());
-//         return std::unexpected{err::NOT_FOUND};
-//     }
-
-//     matchedRoute = (*matchedRoute).getChild(routeKey);
-//     std::printf("got child\n");
-//     if (!matchedRoute) {
-//         std::printf("[getFilePath] Route not found in configuration\n");
-//         return std::unexpected{err::NOT_FOUND};
-//     }
-//     std::printf("valid child: %s\n", matchedRoute->name.c_str() );
-
-//     std::string basePath = *conf::base.getString();
-//     auto file = matchedRoute->getString();
-//     if (!file) {
-//         matchedRoute->print();
-
-//         file = matchedRoute->getChild("file")->getString()->c_str();
-//         // std::filesystem::path result = basePath / std::filesystem::path(type) / *file;
-
-//         // return std::unexpected{err::NOT_FOUND};
-//     }
-//     std::filesystem::path result = basePath / std::filesystem::path(type) / *file;
-
-//     std::printf("formated %s\n", file->c_str());
-//     return result;
-// }
-//
 std::expected<std::string, err::Error> renderResource(std::filesystem::path file_path) {
     std::ifstream in(file_path, std::ios::binary);
     if (!in) {
@@ -162,29 +124,12 @@ std::expected<std::filesystem::path, err::Error> getPath(models::URL url) {
 models::Response errorResponse(err::Error, std::string message) {
     models::Response reponse;
 
-    
+
 
     return reponse;
 }
 
-std::expected<models::Response, err::Error> get(httplib::Request request) {
-    models::Response response;
-    response.status = 200;
-
-    DEBUG_LOG(std::printf("Method: %s\n", request.method.c_str()));
-
-    auto url = explodeURL(request.path);
-    if (!url) {
-        response = errorResponse(err::BAD_REQUEST, "URL is bad.");
-        return response;
-    }
-    DEBUG_LOG(url->print());
-
-    std::string accept = request.get_header_value("Accept");
-
-    DEBUG_LOG(conf::mimeTypes.print());
-
-    // std::string returnType;
+std::expected<void, err::Error> injectMime(models::Response& response, models::URL& url, std::string accept) {
     for (auto i: conf::mimeTypes.getChildren()) {
         if (!i.getString()) {
             return std::unexpected{err::INTERNAL_ERROR};
@@ -199,17 +144,35 @@ std::expected<models::Response, err::Error> get(httplib::Request request) {
             if (!i.getString()) {
                 return std::unexpected{err::INTERNAL_ERROR};
             }
-            if (url->extention == i.name) {
+            if (url.extention == i.name) {
                 response.mimeType = *i.getString();
                 break;
             }
         }
     }
     if (response.mimeType.empty()) {
-        url->extention = "html";
+        url.extention = "html";
         response.mimeType = "text/html";
     }
-    DEBUG_LOG(url->print());
+    
+    return {};
+};
+
+std::expected<models::Response, err::Error> get(httplib::Request request) {
+    models::Response response;
+    response.status = 200;
+
+    auto url = explodeURL(request.path);
+    if (!url) {
+        response = errorResponse(err::BAD_REQUEST, "URL is bad.");
+        return response;
+    }
+
+    std::string accept = request.get_header_value("Accept");
+    auto mimeResult = injectMime(response, *url, accept);
+    if (!mimeResult) {
+        return std::unexpected{err::INTERNAL_ERROR};
+    }
 
     auto path = getPath(*url);
     if (!path) {
@@ -219,93 +182,13 @@ std::expected<models::Response, err::Error> get(httplib::Request request) {
 
     auto content = renderResource(response.resource.route);
     if (!content) {
-        DEBUG_LOG(std::printf("Failed to render resource: %s\n", response.resource.route.c_str()));
         return std::unexpected{err::INTERNAL_ERROR};
     }
-    DEBUG_LOG(std::printf("content: %s\n", content->c_str()));
 
     response.resource.content = *content;
 
     return response;
 }
-
-// resolves URL to path
-
-// std::expected<models::Response, err::Error> getFile(std::filesystem::path route) {
-//     models::Response response;
-//     std::string url = route.string();
-
-//     std::string fragment;
-//     std::string query;
-
-//     if (auto pos = url.find('#'); pos != std::string::npos) {
-//         fragment = url.substr(pos);
-//         url = url.substr(0, pos);
-//     }
-
-//     if (auto pos = url.find('?'); pos != std::string::npos) {
-//         query = url.substr(pos);
-//         url = url.substr(0, pos);
-//     }
-
-//     std::filesystem::path p(url);
-
-//     std::string routeUrl = p.stem().string();
-//     std::string parent = p.parent_path().string();
-
-//     std::printf("route: %s\n", routeUrl.c_str());
-//     std::printf("type: %s\n", parent.c_str());
-
-//     if (parent.empty()) {
-//         parent = "html";
-//     } else {
-//         routeUrl+=p.extension().string();
-//     }
-
-//     std::printf("Resolving path\n");
-//     auto resolved = getFilePath(routeUrl, parent);
-
-//     std::printf("Resolved path\n");
-//     if (!resolved) {
-//         return std::unexpected(resolved.error());
-//     }
-//     std::printf("Unresolving path\n");
-
-//     if (!std::filesystem::exists(*resolved) || std::filesystem::is_directory(*resolved)) {
-//         return std::unexpected(err::Error(err::Code::OTHER, "File not found: " + resolved->string()));
-//     }
-//     std::printf("File found\n");
-
-//     if (resolved->extension() == ".html") {
-//         auto matchedRoute = conf::routes.getChild(route.string());
-//         models::Variable options;
-
-//         if (matchedRoute) {
-//             auto opts = matchedRoute->getChild("options");
-
-//             if (opts) {
-//                 options = *opts;
-//             }
-//         }
-
-//         return render_html(*resolved, options);
-//     }
-
-//     std::ifstream in(*resolved, std::ios::binary);
-
-//     if (!in) {
-//         return std::unexpected(err::Error(err::Code::OTHER, "Could not open file: " + resolved->string()));
-//     }
-
-//     std::ostringstream buffer;
-//     buffer << in.rdbuf();
-
-//     models::Resource resource;
-//     resource.route = *resolved;
-//     resource.content = buffer.str();
-
-//     return resource;
-// }
 
 std::expected<void, err::Error> updater() {
     err::Error e = conf::update();
