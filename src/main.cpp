@@ -23,38 +23,14 @@ namespace {
         return value ? *value : "application/octet-stream";
     }
 
-    models::Resource readNotFoundResource() {
-        auto fallbackPath = not_found();
-
-        models::Resource fallback;
-        fallback.route = fallbackPath ? *fallbackPath : std::filesystem::path("");
-
-        if (!fallback.route.empty() && std::filesystem::exists(fallback.route)) {
-            std::ifstream in(fallback.route, std::ios::binary);
-            std::ostringstream buffer;
-            buffer << in.rdbuf();
-            fallback.content = buffer.str();
-        } else {
-            fallback.content = "404 Not Found";
-        }
-        return fallback;
-    }
-
     void handleGet(const httplib::Request& req, httplib::Response& res) {
         std::printf("got: %s\n", req.path.c_str());
-        auto resource = getFile(req.path.substr(1));
 
-        int status = 200;
+        using Req = std::remove_cvref_t<decltype(req)>;
+        auto reponse = get(req);
 
-        if (!resource) {
-            status = resource.error().code;
-            resource = readNotFoundResource();
-        }
-
-        std::cout << "returned: " << resource->route << std::endl;
-
-        res.status = status;
-        res.set_content(resource->content, mimeTypeFor(resource->route));
+        res.status = reponse->status;
+        res.set_content(reponse->resource.content, reponse->mimeType);
     }
 
 }
@@ -76,8 +52,8 @@ int main() {
 
     std::printf("attempting to grab port...\n");
     auto portVar = env::get("port");
-    std::printf("grabbed port...\n");
 
+    std::printf("grabbed port...\n");
     if (!portVar) {
         std::cerr << "port is not defined in settings.env" << std::endl;
         return 1;

@@ -6,6 +6,13 @@
 #include <string>
 #include <vector>
 
+namespace DEBUG {
+    inline bool enabled = true;
+}
+
+#define DEBUG_LOG(x) \
+    do { if (DEBUG::enabled) { x; } } while (0)
+
 namespace err {
 
     enum class Code {
@@ -16,6 +23,7 @@ namespace err {
         NOT_FOUND,
         UNAUTHORIZED,
         FORBIDDEN,
+        BAD_REQUEST,
     };
 
     struct Error {
@@ -39,9 +47,10 @@ namespace err {
     inline const Error UNDEFINED{Code::UNDEFINED, "Undefined"};
     inline const Error OTHER{Code::OTHER, "Description unprovided"};
     inline const Error NONE{Code::NONE, "Object does not exist"};
-    inline const Error NOT_FOUND{404, "Object was not found"};
+    inline const Error BAD_REQUEST{400, "Bad request"};
     inline const Error UNAUTHORIZED{401, "Unauthorized"};
     inline const Error FORBIDDEN{403, "Forbidden"};
+    inline const Error NOT_FOUND{404, "Object was not found"};
     inline const Error INTERNAL_ERROR{500, "Unexpected server error"};
 }
 
@@ -82,8 +91,18 @@ namespace models {
 
     struct Response {
         unsigned int status;
-        std::string mime;
+        std::string mimeType;
         Resource resource;
+    };
+
+    struct URL {
+        std::string fragment;
+        std::string extention;
+        std::string parent;
+        std::string query;
+        std::string name;
+
+        void print() const;
     };
 
 }

@@ -10,7 +10,7 @@ namespace models {
         // Empty strings print as null, everything else as an escaped "string"
         std::string quoteOrNull(const std::string& s) {
             if (s.empty()) return "null";
-    
+
             std::string out = "\"";
             for (char c : s) {
                 switch (c) {
@@ -24,11 +24,11 @@ namespace models {
             return out + "\"";
         }
     }
-    
+
     std::string Variable::dump(int indent) const {
         std::string pad(indent * 2, ' ');
         std::string in((indent + 1) * 2, ' ');
-    
+
         std::ostringstream o;
         o << "Variable {\n";
         o << in << "name: "        << quoteOrNull(name) << ",\n";
@@ -36,7 +36,7 @@ namespace models {
         o << in << "data: "        << quoteOrNull(data) << ",\n";
         o << in << "hasChildren: " << (children.empty() ? "false" : "true") << ",\n";
         o << in << "children: ";
-    
+
         if (children.empty()) {
             o << "null";
         } else {
@@ -48,15 +48,15 @@ namespace models {
             }
             o << in << "]";
         }
-    
+
         o << "\n" << pad << "}";
         return o.str();
     }
-    
+
     void Variable::print() const {
         std::cout << dump() << std::endl;   // endl flushes, so it survives a crash
     }
-    
+
     std::ostream& operator<<(std::ostream& os, const Variable& v) {
         return os << v.dump();
     }
@@ -136,6 +136,12 @@ namespace models {
         return children;
     }
 
-
+    void URL::print() const {
+        std::printf("parent: %s\n", parent.c_str());
+        std::printf("name: %s\n", name.c_str());
+        std::printf("extention: %s\n", extention.c_str());
+        std::printf("fragment: %s\n", fragment.c_str());
+        std::printf("query: %s\n", query.c_str());
+    }
 
 }
