@@ -3,33 +3,14 @@
 #include "conf.hpp"
 #include "html_inject.hpp"
 
-#include <cstddef>
 #include <expected>
 #include <fstream>
 #include <sstream>
 
-std::expected<std::filesystem::path, err::Error> not_found() {
-    auto override = conf::defaults.getChild("404");
-
-    if (override) {
-        auto file = override->getString();
-
-        if (file) {
-            std::string basePath = *conf::base.getString();
-            std::filesystem::path result = basePath / std::filesystem::path("html/defaults") / *override->getString();
-
-            return result;
-        }
-    }
-
-
-    return std::filesystem::path("");
-}
-
 std::expected<std::string, err::Error> renderResource(std::filesystem::path file_path) {
     std::ifstream in(file_path, std::ios::binary);
     if (!in) {
-        return std::unexpected{err::Error(err::Code::OTHER, "Could not open file: " + file_path.string())};
+        return std::unexpected{err::Error(err::Code::INTERNAL_ERROR, "Could not open file: " + file_path.string())};
     }
 
     std::ostringstream buffer;
@@ -67,66 +48,56 @@ std::expected<models::URL, err::Error> explodeURL(std::filesystem::path URL) {
     return result;
 }
 
-std::expected<std::filesystem::path, err::Error> getPath(models::URL url) {
+std::expected<std::filesystem::path, err::Error> getPath(models::URL url, err::Error err) {
+
     auto matchedRoute = conf::routes.getChild(url.extention);
+    if (err.code != err::OK.code) {
+        matchedRoute = conf::routes.getChild("errors");
+    }
     if (!matchedRoute) {
-        DEBUG_LOG(std::printf("[getFilePath] type '%s' not found in configuration\n", url.extention.c_str()));
         return std::unexpected{err::NOT_FOUND};
     }
 
-    matchedRoute = (*matchedRoute).getChild(url.name);
-    if (!matchedRoute) {
-        DEBUG_LOG(std::printf("[getFilePath] Route not found in configuration\n"));
-        return std::unexpected{err::NOT_FOUND};
+    auto matchedFile = (*matchedRoute).getChild(url.name);
+    if (!matchedFile) {
+        if (err.code != err::OK.code) {
+            matchedFile = (*matchedRoute).getChild("_");
+        } else {
+            return std::unexpected{err::NOT_FOUND};
+        }
+        if (!matchedFile) {
+            return std::unexpected{err::NOT_FOUND};
+        }
     }
 
     std::string basePath = *conf::base.getString();
-    auto file = matchedRoute->getString();
+    auto file = matchedFile->getString();
     if (!file) {
-        matchedRoute->print();
-        file = matchedRoute->getChild("file")->getString()->c_str();
+        file = matchedFile->getChild("file")->getString()->c_str();
     }
 
-    std::filesystem::path result = basePath / std::filesystem::path(url.extention) / *file;
+    std::filesystem::path result = basePath / std::filesystem::path(matchedRoute->name) / *file;
 
     return result;
 }
 
-// Resolves entire page
-//
-// deal middleware??
-// todo
-//
-// gets the actual page/api/else: about, index, etc
-//
-    // indetifies 404
-    // gets 404 path
-    // sets page/api to 404 page/api
-//
-// identifies api or not
-// api:??
-// todo
-//
-// not api:
-// gets the type
-// gets the file path
-//
-// gets options recursively
-// gets options modifiers
-// gets options paths
-// injects options
-//
-// gets the query: ?id=123
-// resolves query??
-// todo
-//
+models::Response errorResponse(err::Error err, std::string message) {
+    models::Response response;
+    response.status = err.code;
 
-models::Response errorResponse(err::Error, std::string message) {
-    models::Response reponse;
+    httplib::Request request;
+    request.path = "/errors/" + std::to_string(err.code);
+    request.set_header("Accept", "text/html");
 
+    auto res = get(request, err);
+    if (!res) {
+        response.status = res.error().code;
+        response.mimeType = "application/octet-stream";
+        return response;
+    }
+    response = *res;
 
-
-    return reponse;
+    return response;
 }
 
 std::expected<void, err::Error> injectMime(models::Response& response, models::URL& url, std::string accept) {
@@ -154,13 +125,41 @@ std::expected<void, err::Error> injectMime(models::Response& response, models::U
         url.extention = "html";
         response.mimeType = "text/html";
     }
-    
+
     return {};
 };
 
-std::expected<models::Response, err::Error> get(httplib::Request request) {
+// game plan: Resolves entire page
+    //
+    // deal middleware??
+    // todo
+    //
+    // gets the actual page/api/else: about, index, etc
+    //
+    // indetifies 404
+    // gets 404 path
+    // sets page/api to 404 page/api
+    //
+    // identifies api or not
+    // api:??
+    // todo
+    //
+    // not api:
+    // gets the type
+    // gets the file path
+    //
+    // gets options recursively
+    // gets options modifiers
+    // gets options paths
+    // injects options
+    //
+    // gets the query: ?id=123
+    // resolves query??
+    // todo
+    //
+std::expected<models::Response, err::Error> get(httplib::Request request, err::Error err) {
     models::Response response;
-    response.status = 200;
+    response.status = err.code;
 
     auto url = explodeURL(request.path);
     if (!url) {
@@ -171,18 +170,30 @@ std::expected<models::Response, err::Error> get(httplib::Request request) {
     std::string accept = request.get_header_value("Accept");
     auto mimeResult = injectMime(response, *url, accept);
     if (!mimeResult) {
-        return std::unexpected{err::INTERNAL_ERROR};
+        if (response.status == static_cast<unsigned int>(err::INTERNAL_ERROR.code)) {
+            return std::unexpected{err::INTERNAL_ERROR};
+        }
+        response = errorResponse(mimeResult.error(), "Route not found");
+        return response;
     }
-
-    auto path = getPath(*url);
+    auto path = getPath(*url, err);
     if (!path) {
-        return std::unexpected{err::INTERNAL_ERROR};
+        if (response.status == static_cast<unsigned int>(err::INTERNAL_ERROR.code)) {
+            return std::unexpected{err::INTERNAL_ERROR};
+        }
+        response = errorResponse(path.error(), "Unable to aquire path");
+        return response;
     }
     response.resource.route = *path;
 
     auto content = renderResource(response.resource.route);
     if (!content) {
-        return std::unexpected{err::INTERNAL_ERROR};
+        
+        if (response.status == static_cast<unsigned int>(err::INTERNAL_ERROR.code)) {
+            return std::unexpected{err::INTERNAL_ERROR};
+        }
+        response = errorResponse(content.error(), "cant render resource");
+        return response;
     }
 
     response.resource.content = *content;
@@ -191,10 +202,10 @@ std::expected<models::Response, err::Error> get(httplib::Request request) {
 }
 
 std::expected<void, err::Error> updater() {
-    err::Error e = conf::update();
+    auto e = conf::update();
 
-    if (e.code != static_cast<int>(err::Code::OK)) {
-        return std::unexpected(e);
+    if (!e) {
+        return std::unexpected(e.error());
     }
 
     return {};

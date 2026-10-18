@@ -16,18 +16,19 @@ namespace DEBUG {
 namespace err {
 
     enum class Code {
-        OK,
+        OK = 200,
         UNDEFINED,
         OTHER,
         NONE,
-        NOT_FOUND,
-        UNAUTHORIZED,
-        FORBIDDEN,
-        BAD_REQUEST,
+        NOT_FOUND = 404,
+        UNAUTHORIZED = 401,
+        FORBIDDEN = 403,
+        BAD_REQUEST = 400,
+        INTERNAL_ERROR = 500,
     };
 
     struct Error {
-        int code = 0;
+        int code = 200;
         std::string message;
 
         Error() = default;
@@ -47,11 +48,11 @@ namespace err {
     inline const Error UNDEFINED{Code::UNDEFINED, "Undefined"};
     inline const Error OTHER{Code::OTHER, "Description unprovided"};
     inline const Error NONE{Code::NONE, "Object does not exist"};
-    inline const Error BAD_REQUEST{400, "Bad request"};
-    inline const Error UNAUTHORIZED{401, "Unauthorized"};
-    inline const Error FORBIDDEN{403, "Forbidden"};
-    inline const Error NOT_FOUND{404, "Object was not found"};
-    inline const Error INTERNAL_ERROR{500, "Unexpected server error"};
+    inline const Error BAD_REQUEST{Code::BAD_REQUEST, "Bad request"};
+    inline const Error UNAUTHORIZED{Code::UNAUTHORIZED, "Unauthorized"};
+    inline const Error FORBIDDEN{Code::FORBIDDEN, "Forbidden"};
+    inline const Error NOT_FOUND{Code::NOT_FOUND, "Object was not found"};
+    inline const Error INTERNAL_ERROR{Code::INTERNAL_ERROR, "Unexpected server error"};
 }
 
 namespace models {

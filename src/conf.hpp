@@ -7,11 +7,11 @@ namespace conf {
 
     extern models::Variable dirs;
     extern models::Variable routes;
-    extern models::Variable base;
     extern models::Variable mimeTypes;
     extern models::Variable defaults;
     extern models::Variable root;
+    extern models::Variable errors;
 
-    err::Error update();
+    std::expected<void, err::Error> update();
 
 }

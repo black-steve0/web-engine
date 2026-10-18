@@ -4,10 +4,8 @@
 #include "env_engine.hpp"
 #include "conf.hpp"
 #include "handle_routes.hpp"
-
-#include <fstream>
+#include <ctime>
 #include <iostream>
-#include <sstream>
 
 namespace {
 
@@ -24,10 +22,13 @@ namespace {
     }
 
     void handleGet(const httplib::Request& req, httplib::Response& res) {
-        std::printf("got: %s\n", req.path.c_str());
+        std::time_t now = std::time(nullptr);
+        char timestamp[20];
+        std::strftime(timestamp, sizeof(timestamp), "%H:%M:%S", std::localtime(&now));
+        std::printf("[%s]: %s\n",timestamp, req.path.c_str());
 
         using Req = std::remove_cvref_t<decltype(req)>;
-        auto reponse = get(req);
+        auto reponse = get(req, err::OK);
 
         res.status = reponse->status;
         res.set_content(reponse->resource.content, reponse->mimeType);
