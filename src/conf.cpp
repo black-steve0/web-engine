@@ -36,6 +36,8 @@ namespace conf {
         defaults = *newDefaults;
         root = *newRoot;
 
+        dirs.print();
+
         return {};
     }
 }

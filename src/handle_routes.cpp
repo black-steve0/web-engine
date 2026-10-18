@@ -70,18 +70,23 @@ std::expected<std::filesystem::path, err::Error> getPath(models::URL url, err::E
         }
     }
 
-    std::string basePath = *conf::base.getString();
+    std::string basePath = *conf::dirs.getString();
     auto file = matchedFile->getString();
     if (!file) {
-        file = matchedFile->getChild("file")->getString()->c_str();
+        return std::unexpected{err::NOT_FOUND};
     }
-
-    std::filesystem::path result = basePath / std::filesystem::path(matchedRoute->name) / *file;
-
+    
+    std::filesystem::path result;
+    result = basePath / std::filesystem::path(*file);
+    if (matchedRoute->getString()) {        
+        result =basePath / std::filesystem::path(*matchedRoute->getString()) / *file;
+    }
+     
     return result;
 }
 
 models::Response errorResponse(err::Error err, std::string message) {
+    DEBUG_LOG(std::printf("message: %s\n", message.c_str()));
     models::Response response;
     response.status = err.code;
 
@@ -188,7 +193,7 @@ std::expected<models::Response, err::Error> get(httplib::Request request, err::E
 
     auto content = renderResource(response.resource.route);
     if (!content) {
-        
+
         if (response.status == static_cast<unsigned int>(err::INTERNAL_ERROR.code)) {
             return std::unexpected{err::INTERNAL_ERROR};
         }

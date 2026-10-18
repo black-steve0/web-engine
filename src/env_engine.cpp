@@ -48,88 +48,54 @@ namespace env {
             return list;
         }
 
-        // Default: plain, unquoted value - same as Python's fallthrough `return value`
+        // Default: plain, unquoted value
         return models::Variable("string", value);
     }
 
-    // Parses:
+    // Parses a single-line value that may carry inline options:
     //
-    //     "about.html"{--root, default}
+    //     "about.html" {--root, default}
     //
-    // into a "route" Variable with two named children:
-    //     file    -> the parsed file value
-    //     options -> the parsed options list
-    std::expected<models::Variable, err::Error> parse_route_value(std::string value) {
+    // The value itself ("about.html") is an ordinary string Variable, exactly
+    // like every other path. The inline options become a child list named
+    // "options". If there are no inline options, no child is added.
+    std::expected<models::Variable, err::Error> parse_entry(std::string value) {
         value = utils::strip(value, " ");
 
-        auto wrap_no_options =
-            [](std::expected<models::Variable, err::Error> parsed) ->
-                std::expected<models::Variable, err::Error> {
-                if (!parsed) {
-                    return std::unexpected(parsed.error());
+        // Only treat a trailing {...} as options when the value starts with a
+        // quoted string, so plain lists like {a, b} still go to parse_value.
+        if (!value.empty() and (value.front() == '"' or value.front() == '\'') and value.back() == '}') {
+            char quote = value.front();
+            auto closing_quote = value.find(quote, 1);
+
+            if (closing_quote != std::string::npos) {
+                std::string after_quote = utils::strip(value.substr(closing_quote + 1), " ");
+
+                if (!after_quote.empty() and after_quote.front() == '{') {
+                    auto parsed_value = parse_value(value.substr(0, closing_quote + 1));
+
+                    if (!parsed_value) {
+                        return std::unexpected(parsed_value.error());
+                    }
+
+                    auto parsed_options = parse_value(after_quote);
+
+                    if (!parsed_options) {
+                        return std::unexpected(parsed_options.error());
+                    }
+
+                    models::Variable entry = std::move(*parsed_value);
+
+                    models::Variable options = std::move(*parsed_options);
+                    options.name = "options";
+                    entry.addChild(std::move(options));
+
+                    return entry;
                 }
-
-            models::Variable route;
-            route.type = "route";
-
-            models::Variable file = std::move(*parsed);
-            file.name = "file";
-            route.addChild(std::move(file));
-
-            models::Variable options("list", "");
-            options.name = "options";
-            route.addChild(std::move(options));
-
-            return route;
-        };
-
-        // No options
-        if (value.empty() or value.back() != '}') {
-            return wrap_no_options(parse_value(value));
+            }
         }
 
-        // Find the opening { belonging to the options
-        auto options_start = value.rfind('{');
-
-        if (options_start == std::string::npos) {
-            return wrap_no_options(parse_value(value));
-        }
-
-        std::string file_value = utils::strip(value.substr(0, options_start), " ");
-        std::string options_value = utils::strip(value.substr(options_start), " ");
-
-        std::printf("option: %s\n", file_value.c_str());
-        std::printf("option: %s\n", options_value.c_str());
-        auto parsed_file = parse_value(file_value);
-        std::printf("parsed: %s\n", parsed_file->data.c_str());
-
-        if (!parsed_file) {
-            return std::unexpected(parsed_file.error());
-        }
-
-        auto parsed_options = parse_value(options_value);
-
-        if (!parsed_options) {
-            return std::unexpected(parsed_options.error());
-        }
-
-        models::Variable route;
-        route.type = "route";
-
-        models::Variable file = std::move(*parsed_file);
-        file.name = "file";
-        route.addChild(std::move(file));
-
-        models::Variable options = std::move(*parsed_options);
-        options.name = "options";
-        std::printf("option: %s\n", options.data.c_str());
-        route.addChild(std::move(options));
-
-        // for (auto i: route.getChildren()) {
-        //         std::printf("child: %s\n", i.getString()->c_str());
-        // }
-
-        return route;
+        return parse_value(value);
     }
 
     err::Error load_env(std::filesystem::path filepath) {
@@ -139,17 +105,19 @@ namespace env {
             return err::Error(err::Code::OTHER, "Could not open file: " + filepath.string());
         }
 
-        // A frame accumulates the children of the block currently being
-        // parsed. We build bottom-up and attach a finished block to its
-        // parent's frame on '}', which keeps everything as plain values
-        // (no pointers into a vector that could reallocate mid-parse).
+        // A frame is a block currently being parsed. `self` is the Variable
+        // that will be produced when the block closes: either a plain "block"
+        // (for `routes {`) or a value carrying children (for `dirs="/static/" {`).
+        // We build bottom-up and attach a finished block to its parent's
+        // frame on '}', so everything stays plain values (no pointers into a
+        // vector that could reallocate mid-parse).
         struct Frame {
-            std::string name;
+            models::Variable self;
             std::vector<models::Variable> children;
         };
 
         std::vector<Frame> stack;
-        stack.push_back(Frame{"", {}});
+        stack.push_back(Frame{models::Variable("block", ""), {}});
 
         std::string line;
         int line_number = 0;
@@ -162,15 +130,41 @@ namespace env {
                 continue;
             }
 
-            // Block
+            // Open block:
+            //     name {                -> plain block
+            //     name="value" {        -> value with children
             if (line.ends_with("{")) {
-                std::string name = utils::strip(line.substr(0, line.length() - 1), " ");
+                std::string header = utils::strip(line.substr(0, line.length() - 1), " ");
 
-                if (name.empty()) {
+                if (header.empty()) {
                     return err::Error(err::Code::OTHER, "Invalid block on line " + std::to_string(line_number));
                 }
 
-                stack.push_back(Frame{name, {}});
+                auto eq_pos = header.find('=');
+
+                if (eq_pos == std::string::npos) {
+                    models::Variable self("block", "");
+                    self.name = header;
+                    stack.push_back(Frame{std::move(self), {}});
+                } else {
+                    std::string key = utils::strip(header.substr(0, eq_pos), " ");
+                    std::string value = utils::strip(header.substr(eq_pos + 1), " ");
+
+                    if (value.empty()) {
+                        return err::Error(err::Code::OTHER, "Missing value before '{' on line " + std::to_string(line_number));
+                    }
+
+                    auto parsed = parse_value(value);
+
+                    if (!parsed) {
+                        return parsed.error();
+                    }
+
+                    models::Variable self = std::move(*parsed);
+                    self.name = key;
+                    stack.push_back(Frame{std::move(self), {}});
+                }
+
                 continue;
             }
 
@@ -183,40 +177,21 @@ namespace env {
                 Frame finished = std::move(stack.back());
                 stack.pop_back();
 
-                models::Variable block;
-                block.name = finished.name;
-                block.type = "block";
+                models::Variable block = std::move(finished.self);
                 block.children = std::move(finished.children);
 
                 stack.back().children.push_back(std::move(block));
                 continue;
             }
 
-            // Key/value
+            // Key/value (optionally with inline {options})
             auto eq_pos = line.find('=');
 
             if (eq_pos != std::string::npos) {
                 std::string key = utils::strip(line.substr(0, eq_pos), " ");
                 std::string value = utils::strip(line.substr(eq_pos + 1), " ");
 
-                // Route syntax:
-                // key="file.html"{options}
-                bool is_route = false;
-
-                if (!value.empty() and (value.front() == '"' or value.front() == '\'')) {
-                    char quote = value.front();
-                    auto closing_quote = value.find(quote, 1);
-
-                    if (closing_quote != std::string::npos) {
-                        std::string after_quote = utils::strip(value.substr(closing_quote + 1), " ");
-
-                        if (!after_quote.empty() and after_quote.front() == '{') {
-                            is_route = true;
-                        }
-                    }
-                }
-
-                auto parsed = is_route ? parse_route_value(value) : parse_value(value);
+                auto parsed = parse_entry(value);
 
                 if (!parsed) {
                     return parsed.error();
@@ -224,8 +199,6 @@ namespace env {
 
                 models::Variable entry = std::move(*parsed);
                 entry.name = key;
-
-                std::printf("key: %s, value: %s\n", key.c_str(), value.c_str());
 
                 stack.back().children.push_back(std::move(entry));
                 continue;
@@ -238,8 +211,7 @@ namespace env {
             return err::Error(err::Code::OTHER, "Unclosed '{' block");
         }
 
-        models::Variable root;
-        root.type = "block";
+        models::Variable root("block", "");
         root.children = std::move(stack.back().children);
 
         _config = std::move(root);
@@ -259,7 +231,7 @@ namespace env {
             auto next = current.getChild(key);
 
             if (!next) {
-                // Fall back to the environment, same as the Python version.
+                // Fall back to the environment variable.
                 const char* env_value = std::getenv(variable.c_str());
 
                 if (!env_value) {
